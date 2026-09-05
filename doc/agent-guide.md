@@ -121,3 +121,31 @@ kill %1
 - listing skips dotfiles but serves them via /file if path known
 - plain `==` credential compare (timing)
 - single-user, single-process, no session cookies
+
+## 7. Cloudflare Quick Tunnel (scripts/portal-tunnel.sh)
+
+A zero-registration public URL in ~10s. Costs nothing, needs no domain or CF
+account. Script reads the same knobs as the server, never stores credentials.
+
+| subcommand | effect |
+|---|---|
+| `start` | refuse if `FILE_PORTAL_AUTH` unset (public exposure guard) → start backend if not up → start `cloudflared tunnel --url http://HOST:PORT` → poll log up to 8×20s for the `https://*.trycloudflare.com` URL, reopen the tunnel between rounds on timeout (domestic networks drop registration) → persist URL to `$XDG_STATE_HOME/file-portal/url` |
+| `status` | backend / tunnel process state + last URL |
+| `url` | print persisted URL |
+| `stop` | kill tunnel then backend |
+| `stop-tunnel` | kill tunnel only, keep local backend |
+
+Contract details for agents:
+- Knobs resolved from env: `FILE_PORTAL_PORT` (default `8000`), `FILE_PORTAL_ROOT`
+  (default `$HOME`), `FILE_PORTAL_AUTH` (`user:pass`, **mandatory for `start`**),
+  `FILE_PORTAL_HOST` (default `127.0.0.1`).
+- Flags hard-coded for IPv4-only networks: `--edge-ip-version 4 --protocol http2`
+  (`--no-autoupdate` to keep runs reproducible). Do not drop them for CN users.
+- URL discovery: last `https://[a-z0-9-]+\.trycloudflare\.com` line of the log —
+  never `tail -1` of raw log (registration line is followed by connect logs).
+- Quick Tunnel URL rotates on every restart. For a stable URL the operator must
+  migrate to a CF **Named Tunnel** bound to their own domain (`cloudflared tunnel
+  login` → route DNS → run). README points there; this script deliberately does not.
+- Public exposure: the tunnel is the real attack surface. The 401 gate and the
+  `_resolve` containment are the only layers between the internet and the ROOT
+  filesystem; never run `start` with auth disabled.
